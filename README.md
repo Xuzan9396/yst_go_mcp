@@ -4,11 +4,13 @@
 
 ## 功能特性
 
+- ✅ **智能自动化**：自动检测登录状态，未登录时自动触发浏览器登录，一键完成采集
 - ✅ **自动登录**：使用 chromedp 自动打开浏览器，完成 Google OAuth 登录
 - ✅ **持久化会话**：登录一次长期有效，会话数据自动保存到 `~/.yst_go_mcp/`
 - ✅ **批量采集**：支持一次性采集多个月份的日报数据
 - ✅ **格式化输出**：自动生成结构化 Markdown 报告
 - ✅ **跨平台支持**：macOS / Linux / Windows 全平台编译
+- ✅ **灵活超时**：首次登录最长支持 6 分钟超时（默认），适应复杂的认证流程
 
 ## 环境要求
 
@@ -54,19 +56,39 @@ go build -o yst-go-mcp ./cmd/yst-go-mcp
 
 | 工具名称 | 功能说明 | 参数 |
 |---------|---------|------|
-| `browser_login` | 启动浏览器进行登录 | `timeout` (可选，默认 300 秒) |
-| `collect_reports` | 采集日报数据 | `start_month` (必需)、`end_month` (必需)、`output_file` (可选) |
+| `auto_collect_reports` | **🚀 自动采集日报（推荐）** - 自动检测登录状态，未登录时自动启动浏览器登录，登录成功后自动采集数据 | `start_month` (必需)、`end_month` (必需)、`output_file` (可选)、`login_timeout` (可选，默认 360 秒) |
+| `collect_reports` | 采集日报数据（需要已登录） | `start_month` (必需)、`end_month` (必需)、`output_file` (可选) |
+| `browser_login` | 启动浏览器进行登录 | `timeout` (可选，默认 360 秒) |
 | `clear_saved_cookies` | 清除登录信息 | 无 |
 
 ## 使用示例
 
-### 在 Claude Desktop 中使用
+### 方式一：自动化采集（推荐）
+
+**一键完成登录+采集**，推荐首次使用或 Cookie 过期时使用：
 
 ```
-使用 yst-go-mcp 采集 2025-01 到 2025-03 的日报
+使用 auto_collect_reports 采集 2025-01 到 2025-03 的日报
 ```
 
-首次使用会自动打开浏览器，完成 Google 登录后，系统会自动采集数据。
+系统会自动：
+1. 检测是否已登录
+2. 如果未登录，自动打开浏览器进行 Google 登录
+3. 登录成功后自动采集数据
+
+### 方式二：手动分步操作
+
+**首次登录**：
+
+```
+使用 browser_login 登录
+```
+
+**采集数据**：
+
+```
+使用 collect_reports 采集 2025-01 到 2025-03 的日报
+```
 
 ### 使用 Go 客户端测试
 
@@ -141,7 +163,7 @@ $ go run test_stdio.go
 
 ## 开发者
 
-- **版本**: 0.1.0
+- **版本**: 0.0.3
 - **协议版本**: MCP 2024-11-05
 - **仓库**: https://github.com/Xuzan9396/yst_go_mcp
 
@@ -155,14 +177,25 @@ $ go run test_stdio.go
 
 ## 常见问题
 
+### Q: 首次使用应该用哪个工具？
+A: **推荐使用 `auto_collect_reports`**，它会自动检测登录状态，未登录时自动打开浏览器登录，然后自动采集数据，一步到位。
+
+### Q: 登录超时时间太短怎么办？
+A: 默认超时时间为 360 秒（6 分钟）。如需更长时间，可在调用时指定 `login_timeout` 参数，例如 `login_timeout: 600`（10 分钟）。
+
 ### Q: 浏览器启动失败？
 A: 确保系统已安装 Chrome 或 Chromium 浏览器。
 
 ### Q: Cookie 过期？
-A: 运行 `clear_saved_cookies` 清除后重新登录。
+A: 使用 `auto_collect_reports` 会自动检测并重新登录。也可以手动运行 `clear_saved_cookies` 清除后重新登录。
 
 ### Q: 如何查看日志？
 A: 服务器日志会输出到标准错误输出（stderr）。
+
+### Q: `auto_collect_reports` 和 `collect_reports` 有什么区别？
+A:
+- `auto_collect_reports`：智能自动化工具，会自动检测登录状态，未登录时自动触发登录，**推荐使用**
+- `collect_reports`：简单采集工具，需要确保已登录，否则会报错
 
 ## License
 

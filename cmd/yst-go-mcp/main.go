@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/Xuzan9396/yst_go_mcp/internal/browser"
 	"github.com/Xuzan9396/yst_go_mcp/internal/collector"
@@ -17,7 +18,7 @@ func main() {
 	// 创建 MCP Server
 	mcpServer := server.NewMCPServer(
 		"YST Go MCP",
-		"0.1.0",
+		"0.0.3",
 	)
 
 	// 注册工具
@@ -38,8 +39,8 @@ func registerTools(s *server.MCPServer) {
 		mcp.NewTool("browser_login",
 			mcp.WithDescription("启动浏览器进行登录"),
 			mcp.WithNumber("timeout",
-				mcp.DefaultNumber(300),
-				mcp.Description("登录超时时间（秒），默认 300 秒"),
+				mcp.DefaultNumber(360),
+				mcp.Description("登录超时时间（秒），默认 360 秒（6 分钟）"),
 			),
 		),
 		handleBrowserLogin,
@@ -71,11 +72,34 @@ func registerTools(s *server.MCPServer) {
 		),
 		handleClearCookies,
 	)
+
+	// 4. auto_collect_reports 工具（自动化采集）
+	s.AddTool(
+		mcp.NewTool("auto_collect_reports",
+			mcp.WithDescription("自动采集日报数据（如果未登录会自动启动浏览器登录）"),
+			mcp.WithString("start_month",
+				mcp.Required(),
+				mcp.Description("起始月份，格式 YYYY-MM (例如: 2025-01)"),
+			),
+			mcp.WithString("end_month",
+				mcp.Required(),
+				mcp.Description("结束月份，格式 YYYY-MM (例如: 2025-03)"),
+			),
+			mcp.WithString("output_file",
+				mcp.Description("输出文件路径（可选，默认 ~/.yst_go_mcp/output/new.md）"),
+			),
+			mcp.WithNumber("login_timeout",
+				mcp.DefaultNumber(360),
+				mcp.Description("登录超时时间（秒），默认 360 秒（6 分钟）"),
+			),
+		),
+		handleAutoCollectReports,
+	)
 }
 
 // handleBrowserLogin 处理浏览器登录
 func handleBrowserLogin(arguments map[string]interface{}) (*mcp.CallToolResult, error) {
-	timeout := 300
+	timeout := 360
 	if val, ok := arguments["timeout"].(float64); ok {
 		timeout = int(val)
 	}
@@ -125,4 +149,124 @@ func handleClearCookies(arguments map[string]interface{}) (*mcp.CallToolResult, 
 	}
 
 	return mcp.NewToolResultText("✓ Cookie 和浏览器数据已清除"), nil
+}
+
+// handleAutoCollectReports 处理自动采集（自动登录+采集）
+func handleAutoCollectReports(arguments map[string]interface{}) (*mcp.CallToolResult, error) {
+	// 解析参数
+	startMonth, ok := arguments["start_month"].(string)
+	if !ok || startMonth == "" {
+		return mcp.NewToolResultError("start_month 参数必须提供"), nil
+	}
+
+	endMonth, ok := arguments["end_month"].(string)
+	if !ok || endMonth == "" {
+		return mcp.NewToolResultError("end_month 参数必须提供"), nil
+	}
+
+	outputFile, _ := arguments["output_file"].(string)
+
+	loginTimeout := 360
+	if val, ok := arguments["login_timeout"].(float64); ok {
+		loginTimeout = int(val)
+	}
+
+	log.Printf("auto_collect_reports 工具被调用: %s 到 %s, 超时: %d 秒", startMonth, endMonth, loginTimeout)
+
+	// 创建 cookie 管理器
+	cookieManager := cookie.NewManager()
+	c := collector.NewCollector()
+
+	// 检查 cookie 是否存在且有效
+	needLogin := false
+	if !cookieManager.HasCookies() {
+		log.Println("未找到 Cookie 文件，需要登录")
+		needLogin = true
+	} else {
+		// 尝试加载 cookie 并检查登录状态
+		if err := c.LoadSavedCookies(); err != nil {
+			log.Printf("加载 Cookie 失败: %v，需要重新登录", err)
+			needLogin = true
+		} else if !c.CheckLoginStatus() {
+			log.Println("Cookie 已过期，需要重新登录")
+			needLogin = true
+		}
+	}
+
+	// 如果需要登录
+	if needLogin {
+		log.Println("🔐 开始自动登录流程...")
+
+		// 使用 channel 接收登录结果
+		loginResult := make(chan error, 1)
+
+		// 启动浏览器登录（异步）
+		go func() {
+			loginManager := browser.NewLogin()
+			err := loginManager.LaunchBrowserLogin(context.Background(), loginTimeout)
+			loginResult <- err
+		}()
+
+		// 定时检测登录状态
+		checkInterval := 3 * time.Second
+		deadline := time.Now().Add(time.Duration(loginTimeout) * time.Second)
+
+		log.Printf("⏳ 等待登录完成（超时: %d 秒）...", loginTimeout)
+		log.Println("💡 提示：请在浏览器中完成 Google 登录")
+
+		for {
+			select {
+			case err := <-loginResult:
+				if err != nil {
+					return mcp.NewToolResultError(fmt.Sprintf("登录失败: %v", err)), nil
+				}
+				log.Println("✓ 登录成功！")
+				goto LOGIN_SUCCESS
+
+			case <-time.After(checkInterval):
+				// 检查 cookie 文件是否已创建
+				if cookieManager.HasCookies() {
+					log.Println("✓ 检测到 Cookie 文件已创建")
+
+					// 尝试验证登录状态
+					newCollector := collector.NewCollector()
+					if err := newCollector.LoadSavedCookies(); err == nil {
+						if newCollector.CheckLoginStatus() {
+							log.Println("✓ 登录状态验证成功！")
+							c = newCollector
+							goto LOGIN_SUCCESS
+						}
+					}
+					log.Println("⏳ Cookie 文件存在但登录状态未就绪，继续等待...")
+				}
+
+				// 检查超时
+				if time.Now().After(deadline) {
+					return mcp.NewToolResultError(fmt.Sprintf("登录超时（%d 秒）", loginTimeout)), nil
+				}
+
+				elapsed := int(time.Since(deadline.Add(-time.Duration(loginTimeout) * time.Second)).Seconds())
+				log.Printf("⏳ [%ds/%ds] 等待登录中...", elapsed, loginTimeout)
+			}
+		}
+
+	LOGIN_SUCCESS:
+		log.Println("🎉 登录流程完成！")
+
+		// 如果之前没有加载过 cookie，现在加载
+		if err := c.LoadSavedCookies(); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("加载 Cookie 失败: %v", err)), nil
+		}
+	} else {
+		log.Println("✓ Cookie 有效，跳过登录")
+	}
+
+	// 开始采集数据
+	log.Printf("📊 开始采集日报数据: %s 到 %s", startMonth, endMonth)
+	result, err := c.Collect(startMonth, endMonth, outputFile)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("采集失败: %v", err)), nil
+	}
+
+	return mcp.NewToolResultText(result), nil
 }
