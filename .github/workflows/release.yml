@@ -1,0 +1,334 @@
+name: Release YST Go MCP
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # macOS arm64 编译任务（Apple Silicon）
+  build-macos-arm64:
+    name: Build macOS ARM64
+    runs-on: macos-latest  # macos-latest 是 arm64
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.0'
+
+      - name: Build
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "Building for macOS arm64 - Version: $VERSION"
+
+          GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o yst-go-mcp ./cmd/yst-go-mcp
+
+          # 重命名
+          mv yst-go-mcp yst-go-mcp-darwin-arm64
+
+          # 验证
+          file yst-go-mcp-darwin-arm64
+          ls -lh yst-go-mcp-darwin-arm64
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: yst-go-mcp-darwin-arm64
+          path: yst-go-mcp-darwin-arm64
+
+  # macOS amd64 编译任务（Intel）
+  build-macos-amd64:
+    name: Build macOS AMD64
+    runs-on: macos-13  # macos-13 是 x86_64
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.0'
+
+      - name: Build
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "Building for macOS amd64 - Version: $VERSION"
+
+          GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o yst-go-mcp ./cmd/yst-go-mcp
+
+          # 重命名
+          mv yst-go-mcp yst-go-mcp-darwin-amd64
+
+          # 验证
+          file yst-go-mcp-darwin-amd64
+          ls -lh yst-go-mcp-darwin-amd64
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: yst-go-mcp-darwin-amd64
+          path: yst-go-mcp-darwin-amd64
+
+  # Linux 编译任务（amd64）
+  build-linux-amd64:
+    name: Build Linux AMD64
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.0'
+
+      - name: Build
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "Building for Linux amd64 - Version: $VERSION"
+
+          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o yst-go-mcp ./cmd/yst-go-mcp
+
+          # 重命名
+          mv yst-go-mcp yst-go-mcp-linux-amd64
+
+          # 验证
+          file yst-go-mcp-linux-amd64
+          ls -lh yst-go-mcp-linux-amd64
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: yst-go-mcp-linux-amd64
+          path: yst-go-mcp-linux-amd64
+
+  # Windows 编译任务（amd64）
+  build-windows-amd64:
+    name: Build Windows AMD64
+    runs-on: ubuntu-latest  # 交叉编译
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.0'
+
+      - name: Build
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "Building for Windows amd64 - Version: $VERSION"
+
+          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o yst-go-mcp.exe ./cmd/yst-go-mcp
+
+          # 重命名
+          mv yst-go-mcp.exe yst-go-mcp-windows-amd64.exe
+
+          # 验证
+          file yst-go-mcp-windows-amd64.exe
+          ls -lh yst-go-mcp-windows-amd64.exe
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: yst-go-mcp-windows-amd64
+          path: yst-go-mcp-windows-amd64.exe
+
+  # Windows 编译任务（arm64）
+  build-windows-arm64:
+    name: Build Windows ARM64
+    runs-on: ubuntu-latest  # 交叉编译
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.0'
+
+      - name: Build
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "Building for Windows arm64 - Version: $VERSION"
+
+          GOOS=windows GOARCH=arm64 go build -ldflags="-s -w" -o yst-go-mcp.exe ./cmd/yst-go-mcp
+
+          # 重命名
+          mv yst-go-mcp.exe yst-go-mcp-windows-arm64.exe
+
+          # 验证
+          file yst-go-mcp-windows-arm64.exe
+          ls -lh yst-go-mcp-windows-arm64.exe
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: yst-go-mcp-windows-arm64
+          path: yst-go-mcp-windows-arm64.exe
+
+  # 创建 GitHub Release 并发布到 NPM
+  create-release:
+    name: Create Release and Publish NPM
+    needs: [build-macos-arm64, build-macos-amd64, build-linux-amd64, build-windows-amd64, build-windows-arm64]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Display structure
+        run: ls -R ./artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release
+          cp artifacts/yst-go-mcp-darwin-arm64/yst-go-mcp-darwin-arm64 release/
+          cp artifacts/yst-go-mcp-darwin-amd64/yst-go-mcp-darwin-amd64 release/
+          cp artifacts/yst-go-mcp-linux-amd64/yst-go-mcp-linux-amd64 release/
+          cp artifacts/yst-go-mcp-windows-amd64/yst-go-mcp-windows-amd64.exe release/
+          cp artifacts/yst-go-mcp-windows-arm64/yst-go-mcp-windows-arm64.exe release/
+
+          # 设置执行权限
+          chmod +x release/yst-go-mcp-darwin-*
+          chmod +x release/yst-go-mcp-linux-*
+
+          ls -lh release/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release/*
+          body: |
+            ## YST Go MCP - KPI 日报自动采集 MCP 服务器
+
+            ### 🚀 快速安装（推荐）
+
+            **使用 npx（无需 Go 环境）**:
+            ```bash
+            npx -y @xuzan/yst-go-mcp
+            ```
+
+            **配置到 Claude Desktop**:
+            ```json
+            {
+              "mcpServers": {
+                "yst-go-mcp": {
+                  "command": "npx",
+                  "args": ["-y", "@xuzan/yst-go-mcp"]
+                }
+              }
+            }
+            ```
+
+            ### 📦 支持的平台
+
+            本次发布包含以下平台的二进制文件：
+
+            **macOS**:
+            - ✅ Apple Silicon (ARM64): `yst-go-mcp-darwin-arm64`
+            - ✅ Intel (AMD64): `yst-go-mcp-darwin-amd64`
+
+            **Linux**:
+            - ✅ x64 (AMD64): `yst-go-mcp-linux-amd64`
+
+            **Windows**:
+            - ✅ x64 (AMD64): `yst-go-mcp-windows-amd64.exe`
+            - ✅ ARM64: `yst-go-mcp-windows-arm64.exe`
+
+            ### 🔧 手动下载安装
+
+            **macOS (Apple Silicon)**:
+            ```bash
+            curl -L https://github.com/Xuzan9396/yst_go_mcp/releases/latest/download/yst-go-mcp-darwin-arm64 -o yst-go-mcp
+            chmod +x yst-go-mcp
+            mv yst-go-mcp /usr/local/bin/
+            ```
+
+            **macOS (Intel)**:
+            ```bash
+            curl -L https://github.com/Xuzan9396/yst_go_mcp/releases/latest/download/yst-go-mcp-darwin-amd64 -o yst-go-mcp
+            chmod +x yst-go-mcp
+            mv yst-go-mcp /usr/local/bin/
+            ```
+
+            **Linux (amd64)**:
+            ```bash
+            curl -L https://github.com/Xuzan9396/yst_go_mcp/releases/latest/download/yst-go-mcp-linux-amd64 -o yst-go-mcp
+            chmod +x yst-go-mcp
+            sudo mv yst-go-mcp /usr/local/bin/
+            ```
+
+            **Windows (amd64)**:
+            下载 `yst-go-mcp-windows-amd64.exe` 并放置到 PATH 环境变量目录中
+
+            ### ✨ 功能特性
+
+            - ✅ **自动登录**: 使用 chromedp 自动化浏览器登录
+            - ✅ **持久化会话**: 登录一次长期有效，会话保存在 `~/.yst_go_mcp/`
+            - ✅ **批量采集**: 支持一次性采集多个月份的日报数据
+            - ✅ **格式化输出**: 自动生成结构化 Markdown 报告
+            - ✅ **跨平台**: macOS / Linux / Windows 全平台支持
+
+            ### 📖 使用说明
+
+            在 Claude Desktop 中直接对话：
+            ```
+            使用 yst-go-mcp 采集 2025-01 到 2025-03 的日报
+            ```
+
+            首次使用会自动打开浏览器，完成 Google 登录后，系统会自动采集数据。
+
+            ### 📚 完整文档
+
+            查看 [README.md](https://github.com/Xuzan9396/yst_go_mcp/blob/main/README.md) 了解更多信息。
+
+            ### 🐛 问题反馈
+
+            如有问题，请在 [GitHub Issues](https://github.com/Xuzan9396/yst_go_mcp/issues) 中反馈。
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Prepare NPM package
+        run: |
+          # 复制 npm 目录
+          cp -r npm npm-package
+          cd npm-package
+
+          # 创建 bin 目录
+          mkdir -p bin
+
+          # 获取版本号（去掉 v 前缀）
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "NPM Version: $VERSION"
+
+          # 更新 package.json 版本
+          sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" package.json
+
+          cat package.json
+
+      - name: Publish to NPM
+        run: |
+          cd npm-package
+          npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

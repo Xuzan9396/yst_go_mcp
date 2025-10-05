@@ -1,0 +1,45 @@
+{
+  "name": "@xuzan/yst-go-mcp",
+  "version": "0.0.1",
+  "description": "YST Go MCP - KPI 日报自动采集 MCP 服务器",
+  "main": "index.js",
+  "bin": {
+    "yst-go-mcp": "./bin/yst-go-mcp.js"
+  },
+  "scripts": {
+    "postinstall": "node install.js",
+    "test": "node bin/yst-go-mcp.js --help"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "yst",
+    "kpi",
+    "report",
+    "automation",
+    "chromedp",
+    "golang"
+  ],
+  "author": "Xuzan <xuzan9396@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Xuzan9396/yst_go_mcp.git"
+  },
+  "homepage": "https://github.com/Xuzan9396/yst_go_mcp#readme",
+  "bugs": {
+    "url": "https://github.com/Xuzan9396/yst_go_mcp/issues"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ]
+}
