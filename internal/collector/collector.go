@@ -16,9 +16,9 @@ import (
 )
 
 const (
-	BaseURL      = "https://kpi.drojian.dev"
+	BaseURL       = "https://kpi.drojian.dev"
 	ReportListURL = BaseURL + "/report/report-daily/my-list"
-	UserAgent    = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
+	UserAgent     = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
 )
 
 // Collector 日报采集器
@@ -38,7 +38,7 @@ func NewCollector() *Collector {
 	jar, _ := cookiejar.New(nil)
 	return &Collector{
 		client: &http.Client{
-			Jar: jar,
+			Jar:     jar,
 			Timeout: 30 * time.Second,
 		},
 		cookieManager: cookie.NewManager(),
@@ -261,24 +261,53 @@ func (c *Collector) generateMarkdown(allReports map[string][]Report, outputFile 
 
 // getDefaultOutputDir 获取默认输出目录
 func (c *Collector) getDefaultOutputDir() string {
-	// 检查是否是打包后的可执行文件
-	exePath, err := os.Executable()
-	if err == nil {
-		homeDir, err := os.UserHomeDir()
-		if err == nil {
-			outputDir := filepath.Join(homeDir, ".yst_go_mcp", "output")
-			if !filepath.HasPrefix(exePath, "/tmp") && !filepath.HasPrefix(exePath, os.TempDir()) {
-				os.MkdirAll(outputDir, 0755)
-				return outputDir
-			}
+	// 优先使用当前工作目录（AI 客户端的项目目录）
+	if cwd, err := os.Getwd(); err == nil {
+		// 检查当前目录是否可写
+		testFile := filepath.Join(cwd, ".yst_test_write")
+		if f, err := os.Create(testFile); err == nil {
+			f.Close()
+			os.Remove(testFile)
+			log.Printf("使用当前工作目录作为输出目录: %s", cwd)
+			return cwd
 		}
 	}
 
-	// 开发模式
+	// 如果当前目录不可写，使用用户主目录
+	homeDir, err := os.UserHomeDir()
+	if err == nil {
+		outputDir := filepath.Join(homeDir, ".yst_go_mcp", "output")
+		os.MkdirAll(outputDir, 0755)
+		log.Printf("使用用户主目录作为输出目录: %s", outputDir)
+		return outputDir
+	}
+
+	// 最后的备选方案
+	log.Println("使用相对路径 output 作为输出目录")
 	return "output"
 }
 
 // getDefaultOutputFile 获取默认输出文件
 func (c *Collector) getDefaultOutputFile() string {
-	return filepath.Join(c.getDefaultOutputDir(), "new.md")
+	return filepath.Join(c.getDefaultOutputDir(), "日报详情.md")
+}
+
+// ReadMarkdownForSummary 读取日报 MD 文件，返回内容和 CSV 保存路径
+func (c *Collector) ReadMarkdownForSummary(mdFilePath string) (string, string, error) {
+	// 读取 MD 文件内容
+	content, err := os.ReadFile(mdFilePath)
+	if err != nil {
+		return "", "", fmt.Errorf("读取文件失败: %w", err)
+	}
+
+	// 生成 CSV 文件路径（同目录）
+	dir := filepath.Dir(mdFilePath)
+	baseName := filepath.Base(mdFilePath)
+	baseName = strings.TrimSuffix(baseName, filepath.Ext(baseName))
+
+	// 提取月份信息（假设文件名包含月份，如 "1月日报.md"）
+	month := strings.Split(baseName, "月")[0]
+	csvPath := filepath.Join(dir, month+"月汇总总结.csv")
+
+	return string(content), csvPath, nil
 }

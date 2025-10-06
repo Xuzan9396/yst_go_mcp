@@ -47,23 +47,23 @@ func registerTools(s *server.MCPServer) {
 	)
 
 	// 2. collect_reports 工具
-	s.AddTool(
-		mcp.NewTool("collect_reports",
-			mcp.WithDescription("采集指定月份范围的日报数据"),
-			mcp.WithString("start_month",
-				mcp.Required(),
-				mcp.Description("起始月份，格式 YYYY-MM (例如: 2025-01)"),
-			),
-			mcp.WithString("end_month",
-				mcp.Required(),
-				mcp.Description("结束月份，格式 YYYY-MM (例如: 2025-03)"),
-			),
-			mcp.WithString("output_file",
-				mcp.Description("输出文件路径（可选，默认 ~/.yst_go_mcp/output/new.md）"),
-			),
-		),
-		handleCollectReports,
-	)
+	//s.AddTool(
+	//	mcp.NewTool("collect_reports",
+	//		mcp.WithDescription("采集指定月份范围的日报数据"),
+	//		mcp.WithString("start_month",
+	//			mcp.Required(),
+	//			mcp.Description("起始月份，格式 YYYY-MM (例如: 2025-01)"),
+	//		),
+	//		mcp.WithString("end_month",
+	//			mcp.Required(),
+	//			mcp.Description("结束月份，格式 YYYY-MM (例如: 2025-03)"),
+	//		),
+	//		mcp.WithString("output_file",
+	//			mcp.Description("输出文件路径（可选，默认 ~/.yst_go_mcp/output/new.md）"),
+	//		),
+	//	),
+	//	handleCollectReports,
+	//)
 
 	// 3. clear_saved_cookies 工具
 	s.AddTool(
@@ -86,7 +86,7 @@ func registerTools(s *server.MCPServer) {
 				mcp.Description("结束月份，格式 YYYY-MM (例如: 2025-03)"),
 			),
 			mcp.WithString("output_file",
-				mcp.Description("输出文件路径（可选，默认 ~/.yst_go_mcp/output/new.md）"),
+				mcp.Description("输出文件路径（可选，默认,mac是下载目录 ~/Downloads/x月日报.md，windows是保留桌面 C:\\Users\\用户名\\Desktop\\x月日报.md）"),
 			),
 			mcp.WithNumber("login_timeout",
 				mcp.DefaultNumber(360),
@@ -94,6 +94,18 @@ func registerTools(s *server.MCPServer) {
 			),
 		),
 		handleAutoCollectReports,
+	)
+
+	// 5. generate_summary_csv 工具（读取日报 MD 文件，输出内容供 AI 整理成 CSV）
+	s.AddTool(
+		mcp.NewTool("generate_summary_csv",
+			mcp.WithDescription("读取日报详情 MD 文件内容，返回给 AI 模型整理生成 CSV 汇总表格"),
+			mcp.WithString("md_file_path",
+				mcp.Required(),
+				mcp.Description("日报详情 MD 文件的完整路径"),
+			),
+		),
+		handleGenerateSummaryCSV,
 	)
 }
 
@@ -267,6 +279,41 @@ func handleAutoCollectReports(arguments map[string]interface{}) (*mcp.CallToolRe
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("采集失败: %v", err)), nil
 	}
+
+	return mcp.NewToolResultText(result), nil
+}
+
+// handleGenerateSummaryCSV 处理读取日报 MD 并输出内容供 AI 整理
+func handleGenerateSummaryCSV(arguments map[string]interface{}) (*mcp.CallToolResult, error) {
+	mdFilePath, ok := arguments["md_file_path"].(string)
+	if !ok || mdFilePath == "" {
+		return mcp.NewToolResultError("md_file_path 参数必须提供"), nil
+	}
+
+	log.Printf("generate_summary_csv 工具被调用: %s", mdFilePath)
+
+	c := collector.NewCollector()
+	content, csvPath, err := c.ReadMarkdownForSummary(mdFilePath)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("读取 MD 文件失败: %v", err)), nil
+	}
+
+	result := fmt.Sprintf(`📄 已读取日报详情文件: %s
+
+请根据以下日报内容，整理生成 CSV 格式的月度汇总表格，包含以下列：
+- 序号
+- 主要工作任务
+- 权重
+- 任务成果情况
+
+生成的 CSV 文件应保存到: %s
+
+日报内容如下：
+---
+%s
+---
+
+请分析日报内容，提取主要工作任务，并生成符合格式的 CSV 文件。`, mdFilePath, csvPath, content)
 
 	return mcp.NewToolResultText(result), nil
 }
